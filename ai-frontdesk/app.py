@@ -1,7 +1,17 @@
+import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 from dialogue import DialogueManager
 
 print("🤖 Welcome to the BEST Front Desk Assistant! 🌟")
 print("Hello sunshine! I'm your AI bestie. How can I assist you today?")
+
+
+api_key = os.getenv('OPENAI_API_KEY')
+print(f"API Key loaded: {'Yes' if api_key and api_key.startswith('sk-') else 'No'}")
 
 ai = DialogueManager()
 
