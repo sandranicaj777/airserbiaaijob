@@ -1,69 +1,94 @@
 import os
 import random
+from openai import OpenAI
 
 class DialogueManager:
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY')
-        print(f"DialogueManager: API Key = {self.api_key[:20] if self.api_key else 'None'}")
+        self.client = None
+        self.conversation_history = []
         
-        # For now, let's use the fallback mode until we fix the API key loading
-        print("🌟 Using SMART FALLBACK mode (for now!)")
+        # Initialize OpenAI client
+        if self.api_key and self.api_key.startswith('sk-'):
+            try:
+                self.client = OpenAI(api_key=self.api_key)
+                print("🎯 REAL AI ACTIVATED! Using OpenAI GPT")
+            except Exception as e:
+                print(f"❌ OpenAI setup failed: {e}")
+                self.client = None
+        else:
+            print("🌟 Using SMART FALLBACK mode")
+            self.client = None
         
-        # Improved fallback responses with better logic
-        self.current_mode = None  # 'appointment', 'insurance', or None
-        self.appointment_stage = 0  # 0=need name, 1=need date, 2=need time
-        
+        # Fallback responses (backup)
+        self.fallback_responses = {
+            'greeting': "Hello sunshine! 🌟 I'm your AI bestie! How can I assist you today?",
+            'appointment': "I'd love to help schedule your appointment! What's your name, sunshine?",
+            'insurance': "I can verify your insurance coverage! What's your provider, love?",
+            'fallback': "I can help with appointments or insurance. What do you need, princess?"
+        }
+
     def get_response(self, user_input):
-        return self._get_smart_fallback(user_input)
+        # Try real AI first
+        if self.client:
+            try:
+                return self._get_ai_response(user_input)
+            except Exception as e:
+                print(f"⚠️ AI failed, using fallback: {e}")
+                return self._get_fallback_response(user_input)
+        
+        # Use fallback if no AI
+        return self._get_fallback_response(user_input)
     
-    def _get_smart_fallback(self, user_input):
+    def _get_ai_response(self, user_input):
+        # Add user message to history
+        self.conversation_history.append({"role": "user", "content": user_input})
+        
+        # Create system prompt with your personality
+        system_prompt = """You are a friendly, warm AI assistant for a medical clinic. 
+        Use natural, conversational language and occasionally use terms like 'princess', 'sunshine', 'love'.
+        
+        You ONLY handle:
+        - Appointment scheduling (ask for name, preferred date/time)
+        - Insurance verification (ask for provider name)
+        - Basic clinic info (hours, location, services)
+        
+        Rules:
+        1. Be super friendly and supportive
+        2. Ask ONE question at a time
+        3. Never give medical advice
+        4. Keep responses concise but personal
+        5. Use emojis occasionally 😊"""
+        
+        # Prepare messages for OpenAI
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add conversation history (last 6 messages max)
+        messages.extend(self.conversation_history[-6:])
+        
+        # Call OpenAI API
+        response = self.client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=150,
+            temperature=0.7
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # Add AI response to history
+        self.conversation_history.append({"role": "assistant", "content": ai_response})
+        
+        return ai_response
+    
+    def _get_fallback_response(self, user_input):
         user_input_lower = user_input.lower()
         
-        # Check if user is starting a new appointment request
-        if any(word in user_input_lower for word in ['appointment', 'schedule', 'book']):
-            self.current_mode = 'appointment'
-            self.appointment_stage = 1
-            return "I'd love to help schedule your appointment! What's your name, sunshine?"
-        
-        # Check if user is starting insurance verification
+        if any(word in user_input_lower for word in ['hello', 'hi', 'hey']):
+            return self.fallback_responses['greeting']
+        elif any(word in user_input_lower for word in ['appointment', 'schedule', 'book']):
+            return self.fallback_responses['appointment']
         elif any(word in user_input_lower for word in ['insurance', 'coverage', 'verify']):
-            self.current_mode = 'insurance'
-            return "I can verify your insurance coverage! What's your provider, love?"
-        
-        # If we're in appointment mode, handle the flow
-        elif self.current_mode == 'appointment':
-            if self.appointment_stage == 1:  # Waiting for name
-                self.patient_name = user_input
-                self.appointment_stage = 2
-                return f"Nice to meet you, {self.patient_name}! What date works for you, princess?"
-            elif self.appointment_stage == 2:  # Waiting for date
-                self.appointment_date = user_input
-                self.appointment_stage = 3
-                return f"Great! What time on {self.appointment_date} works best, sunshine?"
-            elif self.appointment_stage == 3:  # Waiting for time
-                appointment_time = user_input
-                self.current_mode = None
-                return f"Perfect! I've booked your appointment on {self.appointment_date} at {appointment_time}. You'll get a confirmation soon! 💖"
-        
-        # If we're in insurance mode
-        elif self.current_mode == 'insurance':
-            provider = user_input
-            self.current_mode = None
-            accepted_providers = ['blue cross', 'aetna', 'cigna', 'united']
-            if any(p in user_input_lower for p in accepted_providers):
-                return f"✅ Yes! We accept {provider}. Your coverage is verified, love!"
-            else:
-                return f"❌ Sorry, we don't currently accept {provider}. Please check with your insurer, princess."
-        
-        # Handle clinic info questions
-        elif any(word in user_input_lower for word in ['hour', 'time', 'open']):
-            return "We're open Monday-Friday 8AM-6PM, Saturday 9AM-1PM! 🌟"
-        
-        elif any(word in user_input_lower for word in ['location', 'address', 'where']):
-            return "We're at 123 Medical Center Drive, Healthcare City! 💫"
-        
-        elif any(word in user_input_lower for word in ['hello', 'hi', 'hey']):
-            return "Hello sunshine! 🌟 I'm your AI bestie! How can I assist you today?"
-        
+            return self.fallback_responses['insurance']
         else:
-            return "I can help with appointments, insurance, or clinic info. What do you need, princess?"
+            return self.fallback_responses['fallback']
