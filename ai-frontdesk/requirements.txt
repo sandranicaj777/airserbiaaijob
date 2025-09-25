@@ -5,5 +5,7 @@ elevenlabs>=0.2.0
 sounddevice>=0.4.6
 pydub>=0.25.1
 requests>=2.31.0
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.11
 python-multipart>=0.0.6
 ffmpeg-python>=0.2.0

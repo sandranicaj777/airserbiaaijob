@@ -2,6 +2,10 @@ import os
 import requests
 import platform
 import re
+import speech_recognition as sr
+from pydub import AudioSegment
+from pydub.playback import play
+import io
 
 class SweetVoice:
     def __init__(self):
@@ -13,12 +17,48 @@ class SweetVoice:
             print("🎀 SWEET VOICE READY! Using ElevenLabs")
         else:
             print("🎀 Using macOS system voice (Samantha)")
+        
+  
+        self.recognizer = sr.Recognizer()
+        self.microphone = sr.Microphone()
+        self.setup_microphone()
+    
+    def setup_microphone(self):
+        """Calibrate microphone for ambient noise"""
+        try:
+            with self.microphone as source:
+                print("Preparing microphone for ambient noise...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+            print("Microphone ready!")
+        except:
+            print("Microphone not available, using text input only")
+    
+    def listen_sweetly(self):
+        """Listen to user voice input and convert to text"""
+        try:
+            print("Listening... (speak now)")
+            with self.microphone as source:
+                audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=15)
+            
+            print("Processing speech...")
+            text = self.recognizer.recognize_google(audio)
+            print(f"👂 Heard: {text}")
+            return text.lower()
+            
+        except sr.WaitTimeoutError:
+            print("No speech detected")
+            return ""
+        except sr.UnknownValueError:
+            print("Could not understand audio")
+            return ""
+        except Exception as e:
+            print(f" Microphone error: {e}")
+            return input("Type your message: ").strip()
     
     def speak_sweetly(self, text):
         """Speak with a sweet feminine voice - CLEAN EMOJIS"""
         print(f"🎀 Assistant: {text}")
         
-       
         clean_text = self._remove_emojis(text)
         
         if self.voice_enabled:
@@ -30,7 +70,6 @@ class SweetVoice:
     
     def _remove_emojis(self, text):
         """Remove emojis and special characters that sound weird when spoken"""
-   
         clean_text = re.sub(r'[^\w\s.,!?;:]', '', text)
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
         return clean_text
@@ -58,10 +97,8 @@ class SweetVoice:
             response = requests.post(url, json=data, headers=headers)
             
             if response.status_code == 200:
-                with open("sweet_voice.mp3", "wb") as f:
-                    f.write(response.content)
-                
-                os.system("afplay sweet_voice.mp3")
+                audio = AudioSegment.from_file(io.BytesIO(response.content), format="mp3")
+                play(audio)
                 return True
             else:
                 print(f"ElevenLabs error {response.status_code}, using macOS voice")
@@ -75,21 +112,24 @@ class SweetVoice:
         """Use macOS built-in sweet female voice - SAMANTHA"""
         try:
             os.system(f'say -v "Samantha" "{text}"')
-            print("Speaking with Samantha(MAC Os sweet lady princess) voice")
             return True
         except Exception as e:
             try:
                 os.system(f'say "{text}"')
-                print("Speaking with default voice")
                 return True
             except:
                 print(f" [Voice would say]: {text}")
                 return True
 
 class SimpleListener:
-    def __init__(self):
-        print("🎀 Text-based assistant ready! (Voice output only)")
+    def __init__(self, voice_mode=True):
+        self.voice_mode = voice_mode
+        self.voice = SweetVoice() if voice_mode else None
     
     def get_input(self):
-        """Simple text input - no voice simulation"""
-        return input("You: ").strip()
+        """Get input via voice or text"""
+        if self.voice_mode and self.voice:
+            user_input = self.voice.listen_sweetly()
+            if user_input:
+                return user_input
+        return input("You (type): ").strip()
